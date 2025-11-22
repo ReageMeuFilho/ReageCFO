@@ -4,137 +4,125 @@ pragma solidity ^0.8.22;
 import {OApp, Origin, MessagingFee} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import {OptionsBuilder} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
-import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+
+// EVVM MATE NameService Interface
+interface INameService {
+    function getOwnerOfIdentity(string memory _username) external view returns (address);
+    function verifyStrictAndGetOwnerOfIdentity(string memory _username) external view returns (address);
+}
 
 /**
- * @title ApertureServiceV3 - The Market-Aware Sovereign Ledger with Cross-Chain Settlement
- * @notice An AI-controlled, double-entry accounting ledger with LayerZero cross-chain capabilities
- * @dev Integrates EVVM, Pyth Network, and LayerZero for complete financial automation
+ * @title ApertureServiceV3 - EVVM-Enhanced Market-Aware Sovereign Ledger
+ * @notice An AI-controlled ledger with MATE NameService integration and async nonce support
+ * @dev V3 Enhancement: Adds human-readable payment destinations and high-throughput parallel processing
+ * 
+ * EVVM Integration:
+ * - MATE NameService for human-readable addresses
+ * - Async nonces for parallel transaction processing
+ * - High-throughput treasury operations
  */
 contract ApertureServiceV3 is OApp {
     using OptionsBuilder for bytes;
     
-    // ============ State Variables ============
-    
-    /// @notice The AI agent's wallet address (Coinbase CDP Server Wallet)
     address public agentWallet;
-    
-    /// @notice EVVM ID for the MATE Metaprotocol
     uint256 public constant EVVM_ID = 2;
-    
-    /// @notice Pyth Oracle for price feeds
-    IPyth public immutable pythOracle;
-    
-    /// @notice LayerZero destination chain EID (Base Sepolia)
-    uint32 public destinationEid;
-    
-    // ============ Accounting Structures ============
-    
-    /// @notice Represents a single posting in the double-entry system
+    INameService public immutable nameService;
+
     struct Posting {
         address account;
         uint256 amount;
-        bool isDebit;  // true = Debit, false = Credit
+        bool isDebit;
     }
-    
-    /// @notice Ledger entry with semantic metadata
+
     struct LedgerEntry {
         string intent;
         string agentId;
-        bytes32 pythPriceId;
-        int64 priceAtExecution;
         uint256 timestamp;
     }
+
+    // Async Nonce Support: Track nonces per agent to allow parallel execution
+    mapping(address => mapping(uint256 => bool)) public usedNonces;
     
-    /// @notice Account balances mapping
     mapping(address => mapping(address => uint256)) public balances;
-    
-    /// @notice Transaction history for auditing
     LedgerEntry[] public transactionHistory;
-    
-    /// @notice Processed invoices to prevent double-payment
     mapping(bytes32 => bool) public processedInvoices;
-    
-    /// @notice Price thresholds per asset (Pyth price ID => minimum price)
-    mapping(bytes32 => int64) public priceThresholds;
-    
-    // ============ Events ============
-    
-    event EntryPosted(uint256 indexed entryId, string intent, string agentId);
-    event CrossChainPaymentInitiated(bytes32 indexed invoiceId, uint32 destinationEid, address recipient, uint256 amount);
-    event PriceThresholdSet(bytes32 indexed priceId, int64 threshold);
-    
-    // ============ Errors ============
+
+    event EntryPosted(uint256 indexed entryId, string intent, string agentId, uint256 nonce);
+    event CrossChainPaymentSent(
+        uint32 indexed dstEid,
+        address indexed recipient,
+        uint256 amount,
+        bytes32 invoiceId,
+        uint256 nonce
+    );
+    event PaymentByName(
+        string indexed mateName,
+        address indexed resolvedAddress,
+        uint256 amount,
+        bytes32 invoiceId,
+        uint256 nonce
+    );
     
     error UnauthorizedAgent();
     error LedgerImbalance(uint256 totalDebits, uint256 totalCredits);
     error InsufficientFunds(address account, uint256 required, uint256 available);
     error InvoiceAlreadyProcessed(bytes32 invoiceId);
-    error PriceBelowThreshold(int64 currentPrice, int64 threshold);
-    error StalePriceData();
-    
-    // ============ Constructor ============
-    
+    error NonceAlreadyUsed(address agent, uint256 nonce);
+    error NameResolutionFailed(string mateName);
+
     constructor(
         address _endpoint,
         address _agentWallet,
-        address _pythOracle,
-        uint32 _destinationEid
-    ) OApp(_endpoint, msg.sender) Ownable(msg.sender) {
+        address _owner,
+        address _nameService
+    ) OApp(_endpoint, _owner) Ownable(_owner) {
         agentWallet = _agentWallet;
-        pythOracle = IPyth(_pythOracle);
-        destinationEid = _destinationEid;
+        nameService = INameService(_nameService);
     }
-    
-    // ============ Modifiers ============
-    
+
     modifier onlyAgent() {
         if (msg.sender != agentWallet) revert UnauthorizedAgent();
         _;
     }
-    
-    // ============ Core Functions ============
-    
+
     /**
-     * @notice Execute a double-entry batch transaction with Pyth price validation
+     * @notice Check if a nonce has been used (for async nonce validation)
+     * @param agent Address of the agent
+     * @param nonce Nonce to check
+     */
+    function isNonceUsed(address agent, uint256 nonce) external view returns (bool) {
+        return usedNonces[agent][nonce];
+    }
+
+    /**
+     * @notice Execute a double-entry batch transaction with async nonce support
      * @param postings Array of debits and credits (must balance)
      * @param meta Metadata for the transaction
-     * @param pythPriceUpdate Pyth price update data
      * @param invoiceId Unique invoice identifier
+     * @param nonce Async nonce for parallel execution
      */
-    function executeBatch(
+    function executeBatchAsync(
         Posting[] memory postings,
         LedgerEntry memory meta,
-        bytes[] calldata pythPriceUpdate,
-        bytes32 invoiceId
-    ) external payable onlyAgent {
+        bytes32 invoiceId,
+        uint256 nonce
+    ) public onlyAgent {
+        // Async nonce validation - allows parallel execution
+        if (usedNonces[msg.sender][nonce]) {
+            revert NonceAlreadyUsed(msg.sender, nonce);
+        }
+        usedNonces[msg.sender][nonce] = true;
+
         // Prevent double-payment
         if (processedInvoices[invoiceId]) {
             revert InvoiceAlreadyProcessed(invoiceId);
         }
         processedInvoices[invoiceId] = true;
-        
-        // Update Pyth price (requires fee)
-        uint256 pythFee = pythOracle.getUpdateFee(pythPriceUpdate);
-        pythOracle.updatePriceFeeds{value: pythFee}(pythPriceUpdate);
-        
-        // Get and validate price
-        PythStructs.Price memory price = pythOracle.getPriceUnsafe(meta.pythPriceId);
-        
-        // Check price threshold if set
-        int64 threshold = priceThresholds[meta.pythPriceId];
-        if (threshold > 0 && price.price < threshold) {
-            revert PriceBelowThreshold(price.price, threshold);
-        }
-        
-        // Store price in metadata
-        meta.priceAtExecution = price.price;
-        
+
         // Enforce double-entry logic
         uint256 totalDebits = 0;
         uint256 totalCredits = 0;
-        
+
         for (uint i = 0; i < postings.length; i++) {
             if (postings[i].isDebit) {
                 totalDebits += postings[i].amount;
@@ -152,109 +140,176 @@ contract ApertureServiceV3 is OApp {
                 balances[postings[i].account][address(0)] += postings[i].amount;
             }
         }
-        
+
         // Verify balance
         if (totalDebits != totalCredits) {
             revert LedgerImbalance(totalDebits, totalCredits);
         }
-        
+
         // Record transaction
         meta.timestamp = block.timestamp;
         transactionHistory.push(meta);
-        
-        emit EntryPosted(transactionHistory.length - 1, meta.intent, meta.agentId);
+
+        emit EntryPosted(transactionHistory.length - 1, meta.intent, meta.agentId, nonce);
     }
-    
+
     /**
-     * @notice Execute a cross-chain payment via LayerZero
-     * @param recipient Address to receive funds on destination chain
+     * @notice Pay by MATE name - resolves human-readable name to address
+     * @param mateName MATE NameService username (e.g., "vendor.mate")
+     * @param amount Amount to pay
+     * @param invoiceId Unique invoice identifier
+     * @param intent Description of payment
+     * @param nonce Async nonce for parallel execution
+     */
+    function payByName(
+        string calldata mateName,
+        uint256 amount,
+        bytes32 invoiceId,
+        string calldata intent,
+        uint256 nonce
+    ) external onlyAgent {
+        // Async nonce validation
+        if (usedNonces[msg.sender][nonce]) {
+            revert NonceAlreadyUsed(msg.sender, nonce);
+        }
+        usedNonces[msg.sender][nonce] = true;
+
+        // Prevent double-payment
+        if (processedInvoices[invoiceId]) {
+            revert InvoiceAlreadyProcessed(invoiceId);
+        }
+        processedInvoices[invoiceId] = true;
+
+        // Resolve MATE name to address
+        address recipient = nameService.getOwnerOfIdentity(mateName);
+        if (recipient == address(0)) {
+            revert NameResolutionFailed(mateName);
+        }
+
+        // Execute payment logic (simplified - could integrate with executeBatch)
+        // For now, just record the intent
+        LedgerEntry memory meta = LedgerEntry({
+            intent: intent,
+            agentId: "PayByName",
+            timestamp: block.timestamp
+        });
+        transactionHistory.push(meta);
+
+        emit PaymentByName(mateName, recipient, amount, invoiceId, nonce);
+        emit EntryPosted(transactionHistory.length - 1, intent, "PayByName", nonce);
+    }
+
+    /**
+     * @notice Send cross-chain payment with async nonce support
+     * @param _dstEid Destination endpoint ID (Base Sepolia = 40245)
+     * @param recipient Address to receive funds on Base
      * @param amount Amount to send
      * @param invoiceId Unique invoice identifier
-     * @param intent Description of the payment
+     * @param intent Description of payment
+     * @param nonce Async nonce for parallel execution
      */
-    function executeCrossChainPayment(
+    function sendCrossChainPaymentAsync(
+        uint32 _dstEid,
         address recipient,
         uint256 amount,
         bytes32 invoiceId,
-        string calldata intent
-    ) external payable onlyAgent {
-        // Encode the payment instruction
-        bytes memory payload = abi.encode(recipient, amount, invoiceId, intent);
-        
-        // Build LayerZero options
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
-        
-        // Send the message
+        string calldata intent,
+        uint256 nonce
+    ) public payable onlyAgent {
+        // Async nonce validation
+        if (usedNonces[msg.sender][nonce]) {
+            revert NonceAlreadyUsed(msg.sender, nonce);
+        }
+        usedNonces[msg.sender][nonce] = true;
+
+        // Prevent double-payment
+        if (processedInvoices[invoiceId]) {
+            revert InvoiceAlreadyProcessed(invoiceId);
+        }
+        processedInvoices[invoiceId] = true;
+
+        // Encode payment instruction
+        bytes memory payload = abi.encode(recipient, amount);
+
+        // Build options for gas on destination
+        bytes memory options = OptionsBuilder
+            .newOptions()
+            .addExecutorLzReceiveOption(500000, 0);
+
+        // Send cross-chain message
         _lzSend(
-            destinationEid,
+            _dstEid,
             payload,
             options,
             MessagingFee(msg.value, 0),
             payable(msg.sender)
         );
-        
-        emit CrossChainPaymentInitiated(invoiceId, destinationEid, recipient, amount);
+
+        // Record in ledger
+        LedgerEntry memory meta = LedgerEntry({
+            intent: intent,
+            agentId: "CrossChainPaymentAsync",
+            timestamp: block.timestamp
+        });
+        transactionHistory.push(meta);
+
+        emit CrossChainPaymentSent(_dstEid, recipient, amount, invoiceId, nonce);
+        emit EntryPosted(transactionHistory.length - 1, intent, "CrossChainPaymentAsync", nonce);
     }
-    
+
     /**
-     * @notice Set price threshold for an asset
-     * @param priceId Pyth price feed ID
-     * @param threshold Minimum acceptable price (in Pyth format)
+     * @notice Backward compatibility: Execute batch without async nonce
      */
-    function setPriceThreshold(bytes32 priceId, int64 threshold) external onlyOwner {
-        priceThresholds[priceId] = threshold;
-        emit PriceThresholdSet(priceId, threshold);
+    function executeBatch(
+        Posting[] memory postings,
+        LedgerEntry memory meta,
+        bytes32 invoiceId
+    ) external onlyAgent {
+        // Use timestamp + gasleft as pseudo-nonce for backward compatibility
+        uint256 pseudoNonce = uint256(keccak256(abi.encodePacked(block.timestamp, gasleft(), msg.sender)));
+        this.executeBatchAsync(postings, meta, invoiceId, pseudoNonce);
     }
-    
+
     /**
-     * @notice Update the agent wallet address
+     * @notice Backward compatibility: Send cross-chain payment without async nonce
      */
-    function updateAgentWallet(address newAgent) external onlyOwner {
-        agentWallet = newAgent;
-    }
-    
-    /**
-     * @notice Get account balance
-     */
-    function getBalance(address account, address token) external view returns (uint256) {
-        return balances[account][token];
-    }
-    
-    /**
-     * @notice Get transaction count
-     */
-    function getTransactionCount() external view returns (uint256) {
-        return transactionHistory.length;
-    }
-    
-    /**
-     * @notice Deposit funds to an account
-     */
-    function deposit(address account, uint256 amount) external payable {
-        require(msg.value >= amount, "Insufficient value sent");
-        balances[account][address(0)] += amount;
-    }
-    
-    /**
-     * @notice Estimate LayerZero fee for cross-chain message
-     */
-    function quote(
+    function sendCrossChainPayment(
+        uint32 _dstEid,
         address recipient,
         uint256 amount,
         bytes32 invoiceId,
         string calldata intent
-    ) public view returns (uint256 nativeFee) {
-        bytes memory payload = abi.encode(recipient, amount, invoiceId, intent);
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
-        
-        MessagingFee memory fee = _quote(destinationEid, payload, options, false);
-        return fee.nativeFee;
+    ) external payable onlyAgent {
+        // Use timestamp + gasleft as pseudo-nonce for backward compatibility
+        uint256 pseudoNonce = uint256(keccak256(abi.encodePacked(block.timestamp, gasleft(), msg.sender)));
+        this.sendCrossChainPaymentAsync{value: msg.value}(
+            _dstEid,
+            recipient,
+            amount,
+            invoiceId,
+            intent,
+            pseudoNonce
+        );
     }
-    
-    // ============ LayerZero Receive Function ============
-    
+
     /**
-     * @notice Receives cross-chain messages (for future bidirectional communication)
+     * @notice Quote the fee for sending a cross-chain payment
+     */
+    function quoteCrossChainPayment(
+        uint32 _dstEid,
+        address recipient,
+        uint256 amount
+    ) external view returns (MessagingFee memory fee) {
+        bytes memory payload = abi.encode(recipient, amount);
+        bytes memory options = OptionsBuilder
+            .newOptions()
+            .addExecutorLzReceiveOption(500000, 0);
+        
+        fee = _quote(_dstEid, payload, options, false);
+    }
+
+    /**
+     * @notice Receive cross-chain messages (not used in current design)
      */
     function _lzReceive(
         Origin calldata /*_origin*/,
@@ -263,11 +318,25 @@ contract ApertureServiceV3 is OApp {
         address /*_executor*/,
         bytes calldata /*_extraData*/
     ) internal override {
-        // For Phase III, we only send messages, not receive
-        // Future enhancement: receive confirmations from vault
+        // This contract only sends messages
     }
-    
-    // ============ Fallback ============
-    
+
+    function getBalance(address account, address token) external view returns (uint256) {
+        return balances[account][token];
+    }
+
+    function getTransactionCount() external view returns (uint256) {
+        return transactionHistory.length;
+    }
+
+    function updateAgentWallet(address newAgent) external onlyOwner {
+        agentWallet = newAgent;
+    }
+
+    function deposit(address account, uint256 amount) external payable {
+        require(msg.value >= amount, "Insufficient value sent");
+        balances[account][address(0)] += amount;
+    }
+
     receive() external payable {}
 }
