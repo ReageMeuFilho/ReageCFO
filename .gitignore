@@ -1,0 +1,35 @@
+# Environment variables
+.env
+*.env.local
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+out/
+cache/
+artifacts/
+
+# Foundry
+broadcast/
+!broadcast/README.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
