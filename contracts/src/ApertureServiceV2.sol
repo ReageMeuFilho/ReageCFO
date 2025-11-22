@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.22;
 
+import {OApp, Origin, MessagingFee} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
+import {OptionsBuilder} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title ApertureServiceV2 - The Market-Aware Sovereign Ledger
- * @notice An AI-controlled, double-entry accounting ledger
+ * @notice An AI-controlled, double-entry accounting ledger with cross-chain payment capabilities
  */
-contract ApertureServiceV2 is Ownable {
+contract ApertureServiceV2 is OApp {
+    using OptionsBuilder for bytes;
     
     address public agentWallet;
     uint256 public constant EVVM_ID = 2;
@@ -29,13 +32,23 @@ contract ApertureServiceV2 is Ownable {
     mapping(bytes32 => bool) public processedInvoices;
 
     event EntryPosted(uint256 indexed entryId, string intent, string agentId);
+    event CrossChainPaymentSent(
+        uint32 indexed dstEid,
+        address indexed recipient,
+        uint256 amount,
+        bytes32 invoiceId
+    );
     
     error UnauthorizedAgent();
     error LedgerImbalance(uint256 totalDebits, uint256 totalCredits);
     error InsufficientFunds(address account, uint256 required, uint256 available);
     error InvoiceAlreadyProcessed(bytes32 invoiceId);
 
-    constructor(address _agentWallet) Ownable(msg.sender) {
+    constructor(
+        address _endpoint,
+        address _agentWallet,
+        address _owner
+    ) OApp(_endpoint, _owner) Ownable(_owner) {
         agentWallet = _agentWallet;
     }
 
@@ -93,6 +106,93 @@ contract ApertureServiceV2 is Ownable {
         transactionHistory.push(meta);
 
         emit EntryPosted(transactionHistory.length - 1, meta.intent, meta.agentId);
+    }
+
+    /**
+     * @notice Send cross-chain payment instruction to vault on Base Sepolia
+     * @param _dstEid Destination endpoint ID (Base Sepolia = 40245)
+     * @param recipient Address to receive funds on Base
+     * @param amount Amount to send
+     * @param invoiceId Unique invoice identifier
+     * @param intent Description of payment
+     */
+    function sendCrossChainPayment(
+        uint32 _dstEid,
+        address recipient,
+        uint256 amount,
+        bytes32 invoiceId,
+        string calldata intent
+    ) external payable onlyAgent {
+        // Prevent double-payment
+        if (processedInvoices[invoiceId]) {
+            revert InvoiceAlreadyProcessed(invoiceId);
+        }
+        processedInvoices[invoiceId] = true;
+
+        // Encode payment instruction - simplified to match receiver
+        bytes memory payload = abi.encode(recipient, amount);
+
+        // Build options for gas on destination - increased gas limit
+        bytes memory options = OptionsBuilder
+            .newOptions()
+            .addExecutorLzReceiveOption(500000, 0);
+
+        // Send cross-chain message
+        _lzSend(
+            _dstEid,
+            payload,
+            options,
+            MessagingFee(msg.value, 0),
+            payable(msg.sender)
+        );
+
+        // Record in ledger
+        LedgerEntry memory meta = LedgerEntry({
+            intent: intent,
+            agentId: "CrossChainPayment",
+            timestamp: block.timestamp
+        });
+        transactionHistory.push(meta);
+
+        emit CrossChainPaymentSent(_dstEid, recipient, amount, invoiceId);
+        emit EntryPosted(transactionHistory.length - 1, intent, "CrossChainPayment");
+    }
+
+    /**
+     * @notice Quote the fee for sending a cross-chain payment
+     * @param _dstEid Destination endpoint ID
+     * @param recipient Address to receive funds
+     * @param amount Amount to send
+     * @param invoiceId Invoice identifier
+     * @param intent Payment description
+     */
+    function quoteCrossChainPayment(
+        uint32 _dstEid,
+        address recipient,
+        uint256 amount,
+        bytes32 invoiceId,
+        string calldata intent
+    ) external view returns (MessagingFee memory fee) {
+        bytes memory payload = abi.encode(recipient, amount);
+        bytes memory options = OptionsBuilder
+            .newOptions()
+            .addExecutorLzReceiveOption(500000, 0);
+        
+        fee = _quote(_dstEid, payload, options, false);
+    }
+
+    /**
+     * @notice Receive cross-chain messages (not used in current design, but required by OApp)
+     */
+    function _lzReceive(
+        Origin calldata /*_origin*/,
+        bytes32 /*_guid*/,
+        bytes calldata /*_payload*/,
+        address /*_executor*/,
+        bytes calldata /*_extraData*/
+    ) internal override {
+        // This contract only sends messages, doesn't receive them
+        // But we need to implement this function to satisfy OApp interface
     }
 
     function getBalance(address account, address token) external view returns (uint256) {
