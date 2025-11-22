@@ -106,42 +106,31 @@ contract ApertureVault is OApp {
         
         emit MessageReceived(_origin.srcEid, _origin.sender, _payload);
         
-        // Decode the payment instruction
-        (
-            address recipient,
-            uint256 amount,
-            bytes32 invoiceId,
-            string memory intent
-        ) = abi.decode(_payload, (address, uint256, bytes32, string));
+        // Fix: Decode specific types instead of complex struct
+        (address recipient, uint256 amount) = abi.decode(_payload, (address, uint256));
         
         // Validate
         if (recipient == address(0)) revert InvalidRecipient();
         if (amount == 0) revert InvalidAmount();
-        if (processedInvoices[invoiceId]) {
-            // Already processed, skip to prevent double-payment
-            return;
-        }
         if (amount > vaultBalance) {
             revert InsufficientVaultBalance(amount, vaultBalance);
         }
-        
-        // Mark as processed
-        processedInvoices[invoiceId] = true;
         
         // Release funds
         vaultBalance -= amount;
         payable(recipient).transfer(amount);
         
-        // Record payment
+        // Record payment with simplified data
+        bytes32 invoiceId = keccak256(abi.encodePacked(recipient, amount, block.timestamp));
         paymentHistory.push(Payment({
             recipient: recipient,
             amount: amount,
             invoiceId: invoiceId,
-            intent: intent,
+            intent: "Cross-chain payment",
             timestamp: block.timestamp
         }));
         
-        emit FundsReleased(recipient, amount, invoiceId, intent);
+        emit FundsReleased(recipient, amount, invoiceId, "Cross-chain payment");
     }
     
     // ============ Fallback ============
