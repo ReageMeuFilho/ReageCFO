@@ -83,9 +83,9 @@ The ledger is controlled exclusively by an AI agent using Coinbase CDP Server Wa
 
 | Contract | Network | Address | Purpose |
 |:---|:---|:---|:---|
-| **ApertureServiceV2** | Ethereum Sepolia | `0x741d5a695367Fb7e00A24c8AFb2bc4C0BbC66e9D` | Main ledger with Pyth integration |
+| **ApertureServiceV2** | Ethereum Sepolia | `0xEDC4e211FE792f9B76605850567DD8b98A67A7E4` | Main ledger with Pyth integration |
 | **ApertureServiceV3** | (Upgrade) | TBD | Adds LayerZero messaging |
-| **ApertureVault** | Base Sepolia | `0x71B7D6b72bEf947E6dd79372eA401eb477eFD11E` | Settlement layer |
+| **ApertureVault** | Base Sepolia | `0x23742F2F911Ed434081177e5aA9DB6a5684ba0dC` | Settlement layer |
 
 ### AI Agent
 
@@ -116,7 +116,7 @@ The ledger is controlled exclusively by an AI agent using Coinbase CDP Server Wa
 3. Add Pyth price feed validation
 4. Enforce double-entry accounting
 
-**Result:** ✅ Deployed and verified at `0x741d5a695367Fb7e00A24c8AFb2bc4C0BbC66e9D`
+**Result:** ✅ Deployed and verified at `0xEDC4e211FE792f9B76605850567DD8b98A67A7E4`
 
 ### Phase II: The Agentic Brain
 
@@ -134,7 +134,7 @@ The ledger is controlled exclusively by an AI agent using Coinbase CDP Server Wa
 3. Configure cross-chain peers
 4. Enable settlement messaging
 
-**Result:** ✅ Vault deployed at `0x71B7D6b72bEf947E6dd79372eA401eb477eFD11E`
+**Result:** ✅ Vault deployed at `0x23742F2F911Ed434081177e5aA9DB6a5684ba0dC`
 
 ---
 
@@ -216,8 +216,8 @@ npm install
 
 ```bash
 # 1. View deployed contracts on Etherscan
-# Ledger: https://sepolia.etherscan.io/address/0x741d5a695367Fb7e00A24c8AFb2bc4C0BbC66e9D
-# Vault: https://basescan.org/address/0x71B7D6b72bEf947E6dd79372eA401eb477eFD11E
+# Ledger: https://sepolia.etherscan.io/address/0xEDC4e211FE792f9B76605850567DD8b98A67A7E4
+# Vault: https://basescan.org/address/0x23742F2F911Ed434081177e5aA9DB6a5684ba0dC
 
 # 2. Run the AI agent demo
 cd agent
@@ -269,8 +269,8 @@ MIT License - Built for educational and hackathon purposes.
 ## 🔗 Important Links
 
 - **GitHub Repository:** https://github.com/ReageMeuFilho/ReageCFO
-- **Ledger Contract (Sepolia):** https://sepolia.etherscan.io/address/0x741d5a695367Fb7e00A24c8AFb2bc4C0BbC66e9D
-- **Vault Contract (Base Sepolia):** https://basescan.org/address/0x71B7D6b72bEf947E6dd79372eA401eb477eFD11E
+- **Ledger Contract (Sepolia):** https://sepolia.etherscan.io/address/0xEDC4e211FE792f9B76605850567DD8b98A67A7E4
+- **Vault Contract (Base Sepolia):** https://basescan.org/address/0x23742F2F911Ed434081177e5aA9DB6a5684ba0dC
 - **Agent Control Transfer TX:** https://sepolia.etherscan.io/tx/0xdb8b37d7c2b1cf929323e2c157657428c042e1b96f33f6682ef0e6963693dba3
 
 ---

@@ -1,0 +1,22 @@
+# Environment variables
+.env
+
+# CDP Wallet (contains sensitive seed)
+agent-wallet.json
+
+# Node modules
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
