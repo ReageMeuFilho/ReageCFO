@@ -1,0 +1,41 @@
+stateDiagram-v2
+    [*] --> Available: Initial Balance
+
+    Available --> Pending: Reserve Funds<br/>(Create Financial Tension)
+    
+    note right of Pending
+        💡 TigerBeetle Pattern
+        Funds held in "tension"
+        Not yet committed
+        Can be rolled back
+    end note
+
+    Pending --> InTransit: LayerZero Message Sent
+    
+    note right of InTransit
+        ⛓️ Cross-chain Settlement
+        Message in flight
+        Awaiting confirmation
+    end note
+
+    InTransit --> Settled: Message Delivered ✅
+    InTransit --> Available: Settlement Failed ❌<br/>(Automatic Rollback)
+    
+    note right of Settled
+        ✅ Commit Complete
+        Funds released
+        Double-entry balanced
+        Debits = Credits
+    end note
+
+    Settled --> [*]: Transaction Complete
+
+    note left of Available
+        🔒 Safety Guarantees:
+        • No lost funds
+        • No stuck transactions
+        • Automatic rollback
+        • Zero-sum ledger
+    end note
+
+

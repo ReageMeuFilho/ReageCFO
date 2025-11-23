@@ -1,0 +1,46 @@
+graph TB
+    subgraph "🧠 AI Layer"
+        Agent[🤖 AI Treasury Agent<br/>Coinbase CDP Wallet<br/>0xBCD8...98E0]
+    end
+
+    subgraph "👁️ Data Layer"
+        Pyth[📊 Pyth Network<br/>Real-time Price Feeds<br/>ETH/USD: $2,742.32]
+    end
+
+    subgraph "❤️ Ledger Layer - Sepolia"
+        V2[🏛️ ApertureServiceV2<br/>0xEDC4...7E4<br/>Complete Flow]
+        V3[🏛️ ApertureServiceV3<br/>0xDfE9...9d97<br/>Async Nonces]
+    end
+
+    subgraph "🤝 Messaging Layer"
+        LZ[⛓️ LayerZero V2<br/>Cross-chain Messages<br/>Sepolia → Base]
+    end
+
+    subgraph "💰 Settlement Layer - Base Sepolia"
+        Vault[💰 VendorVault<br/>0x2374...a0dC<br/>Funds Release]
+    end
+
+    subgraph "👥 Recipients"
+        Vendor[👤 Vendors<br/>Payment Recipients]
+    end
+
+    Agent -->|Fetch Prices| Pyth
+    Pyth -->|Market Data| Agent
+    
+    Agent -->|Sign & Send| V2
+    Agent -->|Sign & Send| V3
+    
+    V2 -->|Cross-chain Message| LZ
+    V3 -->|3 Parallel Messages| LZ
+    
+    LZ -->|Deliver| Vault
+    
+    Vault -->|Release Funds| Vendor
+
+    style Agent fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    style Pyth fill:#7B61FF,stroke:#5A47CC,stroke-width:3px,color:#fff
+    style V2 fill:#00D4AA,stroke:#00A085,stroke-width:3px,color:#fff
+    style V3 fill:#00D4AA,stroke:#00A085,stroke-width:3px,color:#fff
+    style LZ fill:#FF6B9D,stroke:#CC5680,stroke-width:3px,color:#fff
+    style Vault fill:#FFB84D,stroke:#CC9340,stroke-width:3px,color:#fff
+    style Vendor fill:#A0AEC0,stroke:#718096,stroke-width:2px,color:#fff

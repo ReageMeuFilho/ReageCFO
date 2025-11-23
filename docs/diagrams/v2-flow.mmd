@@ -1,0 +1,41 @@
+sequenceDiagram
+    participant Invoice as 📄 Invoice
+    participant Agent as 🤖 AI Agent<br/>(CDP Wallet)
+    participant Pyth as 📊 Pyth Network
+    participant Ledger as 🏛️ EVVM Ledger<br/>(Sepolia)
+    participant LZ as ⛓️ LayerZero
+    participant Vault as 💰 Vault<br/>(Base Sepolia)
+    participant Vendor as 👤 Vendor
+
+    Note over Invoice,Vendor: V2: Complete End-to-End Cross-Chain Payment
+
+    Invoice->>Agent: New invoice received<br/>INV-LIVE-xxx<br/>Amount: 0.0001 ETH
+    
+    Agent->>Agent: Load invoice data<br/>Vendor: Acme Cloud<br/>Recipient: 0x742D...
+    
+    Agent->>Pyth: Fetch real-time price<br/>ETH/USD feed
+    Pyth-->>Agent: Price: $2,742.32<br/>Confidence: ±$1.19
+    
+    Agent->>Agent: 🤖 AI Decision Logic<br/>✅ Price > $2000<br/>✅ Amount < $5000<br/>✅ Invoice valid
+    
+    Note over Agent: DECISION: APPROVE
+    
+    Agent->>Ledger: sendCrossChainPayment()<br/>Signed by CDP Wallet<br/>0xBCD8...
+    
+    Note over Ledger: 🏛️ EVVM Sovereign Ledger<br/>Double-entry accounting<br/>Debits = Credits
+    
+    Ledger->>Ledger: Record payment<br/>Create pending state<br/>(Financial Tension)
+    
+    Ledger->>LZ: Send cross-chain message<br/>Destination: Base Sepolia<br/>EID: 40245
+    
+    Note over LZ: Message in transit<br/>Verification & delivery
+    
+    LZ->>Vault: lzReceive()<br/>Payment data delivered
+    
+    Vault->>Vault: Verify message<br/>Release funds
+    
+    Vault->>Vendor: Transfer 0.0001 ETH<br/>To: 0x742D...
+    
+    Note over Ledger: ✅ Commit transaction<br/>Pending → Settled
+    
+    Note over Invoice,Vendor: ✅ Payment Complete<br/>TX: 0x9ec4ae37...<br/>Status: DELIVERED

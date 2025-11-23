@@ -1,0 +1,44 @@
+sequenceDiagram
+    participant Batch as 📦 Batch Invoices
+    participant Agent as 🤖 AI Agent<br/>(CDP Wallet)
+    participant Ledger as 🏛️ EVVM V3 Ledger<br/>(Sepolia)
+    participant LZ as ⛓️ LayerZero
+    participant Vault as 💰 Vault<br/>(Base Sepolia)
+
+    Note over Batch,Vault: V3: High-Throughput Parallel Execution
+
+    Batch->>Agent: 3 invoices received<br/>simultaneously
+    
+    Note over Batch: Invoice A: Cloud Provider A<br/>Invoice B: Cloud Provider B<br/>Invoice C: Cloud Provider C
+
+    Agent->>Agent: Process all 3<br/>in parallel
+
+    par Transaction 1
+        Agent->>Ledger: sendCrossChainPaymentAsync()<br/>Async Nonce: 1763844456777<br/>Invoice A
+        Note over Ledger: TX1: 0x9ff56db9...
+    and Transaction 2
+        Agent->>Ledger: sendCrossChainPaymentAsync()<br/>Async Nonce: 1763844456778<br/>Invoice B
+        Note over Ledger: TX2: 0x92817a3a...
+    and Transaction 3
+        Agent->>Ledger: sendCrossChainPaymentAsync()<br/>Async Nonce: 1763844456779<br/>Invoice C
+        Note over Ledger: TX3: 0x9efefa72...
+    end
+
+    Note over Ledger: 🎯 All 3 TXs in SAME BLOCK<br/>Block 9685199<br/>Total time: 8.2 seconds
+
+    Ledger->>Ledger: Process with async nonces<br/>No sequential dependency<br/>High throughput enabled
+
+    par Message 1
+        Ledger->>LZ: Cross-chain message 1
+        LZ->>Vault: Deliver payment A
+    and Message 2
+        Ledger->>LZ: Cross-chain message 2
+        LZ->>Vault: Deliver payment B
+    and Message 3
+        Ledger->>LZ: Cross-chain message 3
+        LZ->>Vault: Deliver payment C
+    end
+
+    Note over Batch,Vault: ✅ 3 Payments Complete<br/>Parallel Execution Proven<br/>0.37 tx/sec throughput
+
+    Note over Ledger: 💡 Advanced Features:<br/>✅ Async Nonces<br/>✅ EVVM ID: 2<br/>✅ MATE NameService<br/>✅ Executor Pattern
